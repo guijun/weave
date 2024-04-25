@@ -206,7 +206,6 @@ func main() {
 	mflag.BoolVar(&bridgeConfig.NoFastdp, []string{"-no-fastdp"}, false, "Disable Fast Datapath")
 	mflag.BoolVar(&bridgeConfig.NoBridgedFastdp, []string{"-no-bridged-fastdp"}, false, "Disable Bridged Fast Datapath")
 	mflag.StringVar(&trustedSubnetStr, []string{"-trusted-subnets"}, "", "comma-separated list of trusted subnets in CIDR notation")
-	// mflag.StringVar(&dbPrefix, []string{"-db-prefix"}, "/weavedb/weave", "pathname/prefix of filename to store data")
 	mflag.StringVar(&dbPrefix, []string{"-db-prefix"}, "_run/weavedb/weave", "pathname/prefix of filename to store data")
 	mflag.StringVar(&procPath, []string{"-proc-path"}, "/proc", "path to reach host /proc filesystem")
 	mflag.BoolVar(&bridgeConfig.AWSVPC, []string{"-awsvpc"}, false, "use AWS VPC for routing")
@@ -311,25 +310,28 @@ func main() {
 		}
 	}
 	ips := ipset.New(common.LogLogger(), 0)
-	err = weavenet.ResetIPTables(&bridgeConfig, ips)
-	checkFatal(err)
-	bridgeType, err := weavenet.EnsureBridge(procPath, &bridgeConfig, Log, ips)
-	checkFatal(err)
+	if false {
+		err = weavenet.ResetIPTables(&bridgeConfig, ips)
+		checkFatal(err)
+	}
+	if false {
+		bridgeType, err := weavenet.EnsureBridge(procPath, &bridgeConfig, Log, ips)
+		checkFatal(err)
 
-	Log.Println("Bridge type is", bridgeType)
+		Log.Println("Bridge type is", bridgeType)
 
-	config.Password = determinePassword(password)
+		config.Password = determinePassword(password)
 
-	overlay, injectorConsumer := createOverlay(bridgeType, bridgeConfig, config.Host, config.Port, bufSzMB, config.Password != nil)
-	networkConfig.InjectorConsumer = injectorConsumer
+		_, injectorConsumer := createOverlay(bridgeType, bridgeConfig, config.Host, config.Port, bufSzMB, config.Password != nil)
+		networkConfig.InjectorConsumer = injectorConsumer
 
-	if injectorConsumer != nil {
-		if err := weavenet.DetectHairpin("vethwe-bridge", Log); err != nil {
-			Log.Errorf("Setting may cause connectivity issues : %s", err)
-			Log.Infof("Hairpin mode may have been enabled by other software on this machine")
+		if injectorConsumer != nil {
+			if err := weavenet.DetectHairpin("vethwe-bridge", Log); err != nil {
+				Log.Errorf("Setting may cause connectivity issues : %s", err)
+				Log.Infof("Hairpin mode may have been enabled by other software on this machine")
+			}
 		}
 	}
-
 	if nickName == "" {
 		var err error
 		nickName, err = os.Hostname()
@@ -348,12 +350,12 @@ func main() {
 	if bridgeConfig.AWSVPC && bridgeConfig.NoMasqLocal {
 		Log.Fatalf("--awsvpc mode is not compatible with the --no-masq-local option")
 	}
-
+	os.MkdirAll(dbPrefix, os.FileMode(0755))
 	db, err := db.NewBoltDB(dbPrefix)
 	checkFatal(err)
 	defer db.Close()
 
-	router, err := weave.NewNetworkRouter(config, networkConfig, bridgeConfig, name, nickName, overlay, db)
+	router, err := weave.NewNetworkRouter(config, networkConfig, bridgeConfig, name, nickName, nil, db)
 	checkFatal(err)
 	Log.Println("Our name is", router.Ourself)
 
@@ -391,8 +393,9 @@ func main() {
 		dockerVersion = dockerCli.DockerVersion()
 	}
 
-	checkForUpdates(dockerVersion, router, uint(len(peers)))
-
+	if false {
+		checkForUpdates(dockerVersion, router, uint(len(peers)))
+	}
 	observeContainers := func(o docker.ContainerObserver) {
 		if dockerCli != nil {
 			if err := dockerCli.AddObserver(o); err != nil {
@@ -446,7 +449,8 @@ func main() {
 		defer ns.Stop()
 		dnsserver.ActivateAndServe()
 		if dockerCli != nil {
-			populateDNS(ns, dockerCli, name, bridgeConfig.WeaveBridgeName)
+			// populateDNS(ns, dockerCli, name, bridgeConfig.WeaveBridgeName)
+			populateDNS2(ns, dockerCli, name, dnsConfig.Domain)
 		}
 		defer dnsserver.Stop()
 	}
@@ -515,19 +519,25 @@ func main() {
 		// because awsvpc has installed it as well
 		go exposeForAWSVPC(allocator, defaultSubnet, bridgeConfig.WeaveBridgeName, waitReady.Add())
 	}
-
-	applyIPTables := func() {
-		Log.Info("Re-configuring iptables")
-		err := weavenet.ConfigureIPTables(&bridgeConfig, ips)
-		if err != nil {
-			Log.Errorf("Error configuring iptables: %s", err)
+	if false {
+		applyIPTables := func() {
+			Log.Info("Re-configuring iptables")
+			err := weavenet.ConfigureIPTables(&bridgeConfig, ips)
+			if err != nil {
+				Log.Errorf("Error configuring iptables: %s", err)
+			}
+			weavenet.Reexpose(&bridgeConfig, Log)
 		}
-		weavenet.Reexpose(&bridgeConfig, Log)
+		stopChan := make(chan struct{})
+		go weavenet.MonitorForIptablesFlush(Log, "WEAVE-CANARY", []string{"mangle", "nat", "filter"}, applyIPTables, 10*time.Second, stopChan)
+		defer close(stopChan)
 	}
-	stopChan := make(chan struct{})
-	go weavenet.MonitorForIptablesFlush(Log, "WEAVE-CANARY", []string{"mangle", "nat", "filter"}, applyIPTables, 10*time.Second, stopChan)
-	defer close(stopChan)
-
+	if !noDNS {
+		_, err := NewDockerWatcher(dockerCli, ns, router.Ourself.Name, dnsConfig.Domain,Log)
+		if err != nil {
+			checkFatal(err)
+		}
+	}
 	signals.SignalHandlerLoop(common.Log, router)
 }
 

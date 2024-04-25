@@ -90,10 +90,18 @@ func (n *Nameserver) AddEntry(hostname, containerid string, origin mesh.PeerName
 	n.Unlock()
 	n.broadcastEntries(entry)
 }
-
 func (n *Nameserver) AddEntryFQDN(fqdn, containerid string, origin mesh.PeerName, addr address.Address) {
 	hostname := dns.Fqdn(fqdn)
 	if !dns.IsSubDomain(n.domain, hostname) {
+		n.infof("Ignoring registration %s %s %s (not a subdomain of %s)", hostname, addr.String(), containerid, n.domain)
+		return
+	}
+	n.AddEntry(hostname, containerid, origin, addr)
+}
+
+func (n *Nameserver) AddEntryFQDN2(fqdn, containerid string, origin mesh.PeerName, addr address.Address, aForce bool) {
+	hostname := dns.Fqdn(fqdn)
+	if (!aForce) && !dns.IsSubDomain(n.domain, hostname) {
 		n.infof("Ignoring registration %s %s %s (not a subdomain of %s)", hostname, addr.String(), containerid, n.domain)
 		return
 	}

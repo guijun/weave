@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
-	github.com/Microsoft/go-winio v0.4.7 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -36,6 +35,7 @@ require (
 	github.com/mdlayher/raw v0.0.0-20181016155347-fa5ef3332ca9 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
 	github.com/miekg/dns v1.0.4
+	github.com/nanomsg/mangos v2.0.0+incompatible // indirect
 	github.com/onsi/ginkgo v1.14.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
@@ -62,4 +62,5 @@ require (
 	k8s.io/api v0.18.6
 	k8s.io/apimachinery v0.18.6
 	k8s.io/client-go v0.18.6
+	nanomsg.org/go/mangos/v2 v2.0.8 // indirect
 )

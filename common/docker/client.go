@@ -251,6 +251,19 @@ func (c *Client) EnsureNetwork(networkName, driver, subnet string, options map[s
 	return nil
 }
 
+func (c *Client) GetNetwork(nameOrID string) (*docker.Network, error) {
+	networks, err := c.ListNetworks()
+	if err != nil {
+		return nil, err
+	}
+	for _, network := range networks {
+		if network.Name == nameOrID || network.ID == nameOrID {
+			return &network, nil
+		}
+	}
+	return nil, err
+}
+
 // logging
 
 func (c *Client) errorf(fmt string, args ...interface{}) {

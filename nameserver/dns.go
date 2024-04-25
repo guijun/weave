@@ -22,7 +22,8 @@ const (
 	udpBuffSize      = uint16(4096)
 	minUDPSize       = 512
 
-	DefaultListenAddress = "0.0.0.0:53"
+	// DefaultListenAddress = "0.0.0.0:53"
+	DefaultListenAddress = "0.0.0.0:1053"
 	DefaultTTL           = 1
 	DefaultClientTimeout = 5 * time.Second
 )

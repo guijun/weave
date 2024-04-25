@@ -428,3 +428,10 @@ integration-tests: all testrunner
 #     integration-tests
 #
 	RUNNER_ARGS="-parallel" ./test/run-integration-tests.sh
+
+run-weave-dns:
+	go run github.com/weaveworks/weave/prog/weave-dns/
+
+build-weave-dns:
+	go build -o _build/weave-dns github.com/weaveworks/weave/prog/weave-dns/
+

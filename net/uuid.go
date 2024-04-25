@@ -8,14 +8,23 @@ import (
 
 	"github.com/weaveworks/mesh"
 	"github.com/weaveworks/weave/db"
+	"github.com/weaveworks/weave/patch"
+	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
 func getOldStyleSystemUUID() ([]byte, error) {
-	uuid, err := ioutil.ReadFile("/sys/class/dmi/id/product_uuid")
-	if os.IsNotExist(err) {
-		uuid, err = ioutil.ReadFile("/sys/hypervisor/uuid")
+	if patch.EXT_RANDOM_UUID {
+		myuuid := uuid.NewUUID()
+		uuid := []byte(myuuid)
+		return uuid, nil
+	} else {
+
+		uuid, err := ioutil.ReadFile("/sys/class/dmi/id/product_uuid")
+		if os.IsNotExist(err) {
+			uuid, err = ioutil.ReadFile("/sys/hypervisor/uuid")
+		}
+		return uuid, err
 	}
-	return uuid, err
 }
 
 func getSystemUUID(hostRoot string) ([]byte, error) {
