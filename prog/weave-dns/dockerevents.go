@@ -18,6 +18,7 @@ type dockerwatcher struct {
 	client     *docker.Client
 	weave      *weaveapi.Client
 	outname    mesh.PeerName
+	conf       *dnsConfig
 	nameserver *nameserver.Nameserver
 	Log        *logrus.Logger
 	domainName string
@@ -28,10 +29,11 @@ type DockerWatcher interface {
 
 const (
 	_DOLOCK = false
+	_BAN    = "-"
 )
 
-func NewDockerWatcher(client *docker.Client, aNameServer *nameserver.Nameserver, aOurName mesh.PeerName, aDomainName string, aLog *logrus.Logger) (DockerWatcher, error) {
-	w := &dockerwatcher{client: client, nameserver: aNameServer, outname: aOurName, domainName: aDomainName, Log: aLog}
+func NewDockerWatcher(client *docker.Client, aNameServer *nameserver.Nameserver, aConf *dnsConfig, aOurName mesh.PeerName, aDomainName string, aLog *logrus.Logger) (DockerWatcher, error) {
+	w := &dockerwatcher{client: client, conf: aConf, nameserver: aNameServer, outname: aOurName, domainName: aDomainName, Log: aLog}
 	return w, client.AddObserver(w)
 }
 func (s *dockerwatcher) action(aAdd bool, id string) {
@@ -44,6 +46,8 @@ func (s *dockerwatcher) action(aAdd bool, id string) {
 	if container == nil {
 		return
 	}
+	var networkDomain string
+	var networkMapped bool
 	for netid := range container.NetworkSettings.Networks {
 		network, _ := s.client.NetworkInfo(netid)
 		if network == nil {
@@ -51,9 +55,24 @@ func (s *dockerwatcher) action(aAdd bool, id string) {
 		}
 		s.Log.Infof("dockerwtcher.action Network=(%v)", network.Name)
 		{
-			if containerinfo, ok := network.Containers[id]; ok {
+			s.conf.networkToDomainLock.RLock()
+			networkDomain, networkMapped = s.conf.networkToDomain[network.Name]
+			s.conf.networkToDomainLock.RUnlock()
+		}
+		if networkMapped {
+			if networkDomain == _BAN {
+				continue
+			}
+			if len(networkDomain) == 0 {
+				networkDomain = s.domainName
+			}
+		} else {
+			networkDomain = s.domainName
+		}
 
-				fqdn := dns.Fqdn(fmt.Sprintf("%v.%v", container.Name, s.domainName))
+		{
+			if containerinfo, ok := network.Containers[id]; ok {
+				fqdn := dns.Fqdn(fmt.Sprintf("%v.%v", container.Name, networkDomain))
 				fqdn = strings.ReplaceAll(fqdn, "/", "")
 				ip, _, _ := net.ParseCIDR(containerinfo.IPv4Address)
 				if aAdd {

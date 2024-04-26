@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -51,6 +52,9 @@ type dnsConfig struct {
 	TTL           int
 	ClientTimeout time.Duration
 	ResolvConf    string
+
+	networkToDomainLock sync.RWMutex
+	networkToDomain     map[string]string
 }
 
 // return the address part of the DNS listen address, without ":53" on the end
@@ -168,6 +172,8 @@ func main() {
 		advertiseAddress   string
 		pluginConfig       plugin.Config
 		defaultDockerHost  = getenvOrDefault("DOCKER_HOST", "unix:///var/run/docker.sock")
+
+		networkToDomain string
 	)
 
 	mflag.BoolVar(&justVersion, []string{"-version"}, false, "print version and exit")
@@ -185,6 +191,7 @@ func main() {
 	mflag.StringVar(&logLevel, []string{"-log-level"}, "info", "logging level (debug, info, warning, error)")
 	mflag.BoolVar(&pktdebug, []string{"-pkt-debug"}, false, "enable per-packet debug logging")
 	mflag.StringVar(&prof, []string{"-profile"}, "", "enable profiling and write profiles to given path")
+	mflag.StringVar(&networkToDomain, []string{"-network-to-domain"}, "", "map name of container's network to domain name")
 	mflag.IntVar(&config.ConnLimit, []string{"-conn-limit"}, 200, "connection limit (0 for unlimited)")
 	mflag.BoolVar(&noDiscovery, []string{"-no-discovery"}, false, "disable peer discovery")
 	mflag.IntVar(&bufSzMB, []string{"-bufsz"}, 8, "capture buffer size in MB")
@@ -232,6 +239,19 @@ func main() {
 	}
 
 	mflag.Parse()
+
+	if len(networkToDomain) > 0 {
+		if dnsConfig.networkToDomain == nil {
+			dnsConfig.networkToDomain = make(map[string]string)
+		}
+		pairs := strings.Split(networkToDomain, ",")
+		for _, pair := range pairs {
+			pairsplited := strings.Split(pair, ":")
+			if len(pairsplited) >= 2 {
+				dnsConfig.networkToDomain[pairsplited[0]] = pairsplited[1]
+			}
+		}
+	}
 
 	if justVersion {
 		fmt.Printf("weave %s\n", version)
@@ -533,7 +553,7 @@ func main() {
 		defer close(stopChan)
 	}
 	if !noDNS {
-		_, err := NewDockerWatcher(dockerCli, ns, router.Ourself.Name, dnsConfig.Domain,Log)
+		_, err := NewDockerWatcher(dockerCli, ns, &dnsConfig, router.Ourself.Name, dnsConfig.Domain, Log)
 		if err != nil {
 			checkFatal(err)
 		}
